@@ -160,8 +160,6 @@ class OneFoldTrainer:
             self.train_iter += 1
             if self.local_rank == 0:
                 progress_bar(i, len(self.loader_dict['train']), 'Lr:%.4e|Loss:%.3f'%(get_lr(self.optimizer), loss.item()))
-            if i == 20:
-                break
             
 
         dist.barrier()
