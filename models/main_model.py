@@ -55,11 +55,6 @@ class MainModel(nn.Module):
             self.eogFusion = ModalFusion(self.cfg)
             if self.bb_cfg['dropout']:
                 self.eogDropout = nn.Dropout(p=0.1)
-        
-        self.SeqAttn = AgentTransformer(config, 8, 4, 
-                                        pool_size_rate=8, 
-                                        seq_len=config['Transformer']['eeg_pos_enc']['seq_len'], 
-                                        pos_enc_dropout=config['Transformer']['eeg_pos_enc']['dropout'])
 
         if self.training_mode == 'pretrain':
             proj_dim = self.cfg['proj_head']['dim']
@@ -80,14 +75,10 @@ class MainModel(nn.Module):
 
             else:
                 raise NotImplementedError('head not supported: {}'.format(config['proj_head']['name']))
-            
-            if self.local_rank == 0:
-                print('[INFO] Number of params of sequence attention layer: ', sum(p.numel() for p in self.SeqAttn.parameters() if p.requires_grad))
 
         elif self.training_mode in ['scratch', 'fullfinetune', 'freezefinetune']:
             self.classifier = Classifier(self.cfg)
             if self.local_rank == 0:
-                print('[INFO] Number of params of sequence attention layer: ', sum(p.numel() for p in self.SeqAttn.parameters() if p.requires_grad))
                 print('[INFO] Number of params of classifier: ', sum(p.numel() for p in self.classifier.parameters() if p.requires_grad))
              
         else:
@@ -147,7 +138,6 @@ class MainModel(nn.Module):
 
         if self.training_mode == 'pretrain':
             for eeg_feature in eeg_features:
-                eeg_feature = eeg_feature.transpose(1, 2)
                 if eog is not None:
                     eeg_feature = self.eogFusion(eeg_feature, eog_feature)
                 if ppg is not None:
@@ -160,8 +150,7 @@ class MainModel(nn.Module):
                             eeg_feature = self.hboFusion(eeg_feature, fnirs_feature)
                         else:
                             eeg_feature = self.hbFusion(eeg_feature, fnirs_feature)
-                feature = self.SeqAttn(eeg_feature)
-                outputs.append(F.normalize(self.head(feature.transpose(1, 2))))
+                outputs.append(F.normalize(self.head(eeg_feature.transpose(1, 2))))
             
         elif self.training_mode in ['scratch', 'fullfinetune', 'freezefinetune']:
             for eeg_feature in eeg_features:
@@ -175,8 +164,8 @@ class MainModel(nn.Module):
                         eeg_feature = self.fnirs2EEGFusion(eeg_feature, fnirs_feature)
                     else:
                         eeg_feature = self.hboFusion(eeg_feature, fnirs_feature)
-                feature = self.SeqAttn(eeg_feature)
-                outputs.append(self.classifier(feature))
+
+                outputs.append(self.classifier(eeg_feature))
         else:
             raise NotImplementedError
 

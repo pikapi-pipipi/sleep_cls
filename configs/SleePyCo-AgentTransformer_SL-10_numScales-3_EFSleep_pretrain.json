@@ -45,7 +45,7 @@
         "mode": "pretrain",
         "max_epochs": 400,
         "batch_size": 32,
-        "target_lr": 0.000125,
+        "target_lr": 0.0005,
         "weight_decay": 0.0001,
         "temperature": 0.07,
         "recon_weight": 0.01,

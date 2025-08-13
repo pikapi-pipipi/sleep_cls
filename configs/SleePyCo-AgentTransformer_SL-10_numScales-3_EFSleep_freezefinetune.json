@@ -41,7 +41,7 @@
         "mode": "freezefinetune",
         "max_epochs": 400,
         "batch_size": 512,
-        "target_lr": 0.00025,
+        "target_lr": 0.0005,
         "weight_decay": 0.0001,
         "val_period": 500,
         "early_stopping": {

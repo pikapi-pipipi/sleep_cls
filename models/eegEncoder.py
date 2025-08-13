@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .agentTransformer import AgentTransformer
 
 class Bottleneck(nn.Module):
     def __init__(self, in_channels, out_channels, n_layers, maxpool_size, kernel_size=3, first=False):
@@ -69,11 +70,16 @@ class EEGEncoder(nn.Module):
         self.cfg = config
         self.backbone = EEGBackbone(config)
         self.latent_layer = LatentEncoder(self.cfg)
+        self.SeqAttn = AgentTransformer(config, 8, 4, 
+                                pool_size_rate=8, 
+                                seq_len=config['Transformer']['eeg_pos_enc']['seq_len'], 
+                                pos_enc_dropout=config['Transformer']['eeg_pos_enc']['dropout'])
 
     def forward(self, x):
-        return self.latent_layer(self.backbone(x))  
-
-    
+        out = []
+        for eeg_feature in self.latent_layer(self.backbone(x)):
+            out.append(self.SeqAttn(eeg_feature.transpose(1, 2)))
+        return out
 
 class MaxPool1d(nn.Module):
     def __init__(self, maxpool_size):

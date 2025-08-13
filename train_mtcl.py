@@ -130,12 +130,12 @@ class OneFoldTrainer:
         if self.tp_cfg['mode'] == 'freezefinetune':
             if self.local_rank == 0:
                 logger.info('[INFO] Freeze backone')
-                self.model.module.train(False)
-                for p in self.model.module.parameters():
-                    p.requires_grad = False
-                self.model.module.classifier.train(True)
-                for p in self.model.module.classifier.parameters():
-                    p.requires_grad = True
+            self.model.module.train(False)
+            for p in self.model.module.parameters():
+                p.requires_grad = False
+            self.model.module.classifier.train(True)
+            for p in self.model.module.classifier.parameters():
+                p.requires_grad = True
             
 
 
