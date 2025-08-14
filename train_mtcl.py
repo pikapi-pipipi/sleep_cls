@@ -87,8 +87,9 @@ class OneFoldTrainer:
         model = model.to(self.device)
         if self.local_rank == 0:
             logger.info('[INFO] Number of params of model: {}'.format(sum(p.numel() for p in model.parameters() if p.requires_grad)))
-        model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
+        
         if self.tp_cfg['mode'] != 'scratch':
+            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
             if self.local_rank == 0:
                 logger.info('[INFO] Model loaded for finetune')
             load_name = self.cfg['name']
@@ -105,6 +106,8 @@ class OneFoldTrainer:
             if self.local_rank == 0:
                 logger.info('[INFO] Loading model from: {}'.format(load_path))
             model.load_state_dict(torch.load(load_path, weights_only=False), strict=False)
+        else:
+            model = torch.nn.parallel.DistributedDataParallel(model)
         if self.local_rank == 0:
             logger.info('[INFO] Model prepared, Device used: {} GPU:{}'.format(self.device, self.args.gpu))
 
