@@ -154,7 +154,6 @@ class MainModel(nn.Module):
             
         elif self.training_mode in ['scratch', 'fullfinetune', 'freezefinetune']:
             for eeg_feature in eeg_features:
-                eeg_feature = eeg_feature.transpose(1, 2)
                 if eog is not None:
                     eeg_feature = self.eogFusion(eeg_feature, eog_feature)
                 if ppg is not None:
