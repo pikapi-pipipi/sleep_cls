@@ -80,6 +80,7 @@ class EEGEncoder(nn.Module):
         for eeg_feature in self.latent_layer(self.backbone(x)):
             out.append(self.SeqAttn(eeg_feature.transpose(1, 2)))
         return out
+        # return self.latent_layer(self.backbone(x))
 
 class MaxPool1d(nn.Module):
     def __init__(self, maxpool_size):

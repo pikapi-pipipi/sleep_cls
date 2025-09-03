@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+import torch.nn.utils as nn_utils
 import datetime 
 
 from utils import *
@@ -139,7 +140,7 @@ class OneFoldTrainer:
             self.model.module.classifier.train(True)
             for p in self.model.module.classifier.parameters():
                 p.requires_grad = True
-            
+
 
 
     def train_one_epoch(self, epoch):
@@ -150,6 +151,7 @@ class OneFoldTrainer:
         length_load = 0
         
         self.loader_dict['train'].sampler.set_epoch(epoch)
+        params_to_clip = [p for p in self.model.parameters() if p.requires_grad]
 
         for i, (eeg, hbo, hb, ppg, eog, labels) in enumerate(self.loader_dict['train']):
             loss = 0
@@ -185,6 +187,7 @@ class OneFoldTrainer:
                 
             self.optimizer.zero_grad()
             loss.backward()
+            nn_utils.clip_grad_norm_(params_to_clip, max_norm=1.0)
             self.optimizer.step()
 
             self.train_loss += loss.item()

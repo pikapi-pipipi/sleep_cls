@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from .agentTransformer import PositionalEncoding, AgentTransformer
 
 class MaxPool1d(nn.Module):
     def __init__(self, maxpool_size):
@@ -52,11 +53,11 @@ class PPGBackbone(nn.Module):
         self.training_mode = config['training_params']['mode']
 
         # architecture
-        self.init_layer = self.make_layers(in_channels=16, out_channels=64, n_layers=2, maxpool_size=None, kernel_size=kernel_size, first=True)
-        self.layer1 = self.make_layers(in_channels=64, out_channels=128, n_layers=2, maxpool_size=5, kernel_size=kernel_size)
-        self.layer2 = self.make_layers(in_channels=128, out_channels=192, n_layers=3, maxpool_size=5, kernel_size=kernel_size)
-        self.layer3 = self.make_layers(in_channels=192, out_channels=256, n_layers=3, maxpool_size=5, kernel_size=kernel_size)
-        self.layer4 = self.make_layers(in_channels=256, out_channels=256, n_layers=3, maxpool_size=5, kernel_size=kernel_size)
+        self.init_layer = self.make_layers(in_channels=2, out_channels=32, n_layers=1, maxpool_size=None, kernel_size=kernel_size, first=True)
+        self.layer1 = self.make_layers(in_channels=32, out_channels=64, n_layers=1, maxpool_size=5, kernel_size=kernel_size)
+        self.layer2 = self.make_layers(in_channels=64, out_channels=96, n_layers=1, maxpool_size=5, kernel_size=kernel_size)
+        self.layer3 = self.make_layers(in_channels=96, out_channels=128, n_layers=1, maxpool_size=5, kernel_size=kernel_size)
+        self.layer4 = self.make_layers(in_channels=128, out_channels=128, n_layers=1, maxpool_size=5, kernel_size=kernel_size)
 
         if config['backbone']['init_weights']:
             self._initialize_weights()
@@ -88,40 +89,13 @@ class PPGEncoder(nn.Module):
         super(PPGEncoder, self).__init__()
         self.cfg = config
         self.backbone = PPGBackbone(config)
-        self.latent_layer = LatentEncoder(self.cfg)
-        
-    def forward(self, x):
-        return self.latent_layer(self.backbone(x))
+        self.SeqAttn = AgentTransformer(config, 8, 4, pool_size_rate=1, 
+                                        seq_len=config['Transformer']['ppg_pos_enc']['seq_len'], 
+                                        pos_enc_dropout=config['Transformer']['ppg_pos_enc']['dropout'])
 
-
-class LatentEncoder(nn.Module):
-    def __init__(self, config):
-        super(LatentEncoder, self).__init__()
-        self.fp_dim = config['feature_pyramid']['dim']
-        self.num_scales = config['feature_pyramid']['num_scales']
-        self.conv = nn.Conv1d(256, self.fp_dim, 1, 1, 0)
-            
-    def _upsample_add(self, x, y):
-        '''Upsample and add two feature maps.
-        Args:
-          x: (Variable) top feature map to be upsampled.
-          y: (Variable) lateral feature map.
-        Returns:
-          (Variable) added feature map.
-        Note in PyTorch, when input size is odd, the upsampled feature map
-        with `F.upsample(..., scale_factor=2, mode='nearest')`
-        maybe not equal to the lateral feature map size.
-        e.g.
-        original input size: [N,_,15,15] ->
-        conv2d feature map size: [N,_,8,8] ->
-        upsampled feature map size: [N,_,16,16]
-        So we choose bilinear upsample which supports arbitrary output sizes.
-        '''
-        _,_,l = y.size()
-        return F.interpolate(x, size=l, mode='linear', align_corners=True) + y
-    
     def forward(self, x):
-        return self.conv(x)
+        return self.SeqAttn(self.backbone(x).transpose(1, 2))
+
     
 if __name__ == '__main__':
     config = {
@@ -137,6 +111,6 @@ if __name__ == '__main__':
         },
     }
     model = PPGEncoder(config)
-    x = torch.randn(1, 16, 7500)
+    x = torch.randn(1, 1, 7500)
     out = model(x)
     print(out.shape)

@@ -7,6 +7,7 @@ import datetime
 
 import torch
 import torch.optim as optim
+import torch.nn.utils as nn_utils
 from torch.utils.data import DataLoader
 
 import torch.distributed as dist
@@ -153,8 +154,13 @@ class OneFoldTrainer:
             
             self.optimizer.zero_grad()
             loss.backward()
+            nn_utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
             dist.barrier()
+
+            # for name, param in self.model.named_parameters():
+            #     if param.grad is None:
+            #         print(f"Parameter {name} is not used in the computation graph.")
 
             self.train_loss += loss.item()
             self.train_iter += 1
@@ -262,7 +268,9 @@ def main(args):
         config = json.load(config_file)
     config['name'] = os.path.basename(args.config).replace('.json', '')
     torch.distributed.init_process_group(backend="nccl")
-    if dist.get_rank() == 0:    
+    if dist.get_rank() == 0:
+        if not os.path.exists('results/log'):
+            os.mkdir('results/log')
         logger = Logger('results/log/{}.log'.format(str(datetime.datetime.now()).replace(':','-')))
     
     for fold in range(1, config['dataset']['num_splits'] + 1):

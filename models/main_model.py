@@ -6,7 +6,7 @@ from .hemodynamicEncoder import HemodynamicEncoder
 from .ppgEncoder import PPGEncoder
 from .eogEncoder import EOGEncoder
 from .modalFusion import ModalFusion
-from .agentTransformer import AgentTransformer
+from .agentTransformer import PositionalEncoding, AgentTransformer
 
 from .classifiers import Classifier
 import os
@@ -14,7 +14,7 @@ import torch
 
 
 last_chn_dict = {
-    'SleePyCo': 128,
+    'SleePyCo': 256,
 }
 
 
@@ -45,9 +45,7 @@ class MainModel(nn.Module):
                 self.hbDropout = nn.Dropout(p=0.1)
         if self.multimodal[3]:
             self.ppgEncoder = PPGEncoder(self.cfg)
-            self.ppg2EEGFusion = ModalFusion(self.cfg)
-            if self.multimodal[2] or self.multimodal[1]:
-                self.fnirs2EEGFusion = ModalFusion(self.cfg)
+            self.ppgFusion = ModalFusion(self.cfg)
             if self.bb_cfg['dropout']:
                 self.ppgDropout = nn.Dropout(p=0.1)
         if self.multimodal[4]:
@@ -55,6 +53,8 @@ class MainModel(nn.Module):
             self.eogFusion = ModalFusion(self.cfg)
             if self.bb_cfg['dropout']:
                 self.eogDropout = nn.Dropout(p=0.1)
+                
+        self.fc = nn.Linear(self.cfg['feature_pyramid']['dim'] * sum(self.multimodal), last_chn_dict[config['backbone']['name']])
 
         if self.training_mode == 'pretrain':
             proj_dim = self.cfg['proj_head']['dim']
@@ -96,77 +96,49 @@ class MainModel(nn.Module):
         # bz = eeg.size(0)
         # seq_len = self.cfg['dataset']['seq_len']
         eeg_features = self.eegEncoder(eeg)
-        if self.bb_cfg['dropout']:
-            eeg_features = self.eegDropout(eeg_features)
         
         if eog is not None:
             eog_feature = self.eogEncoder(eog)
             if self.bb_cfg['dropout']:
                 eog_feature = self.eogDropout(eog_feature)
-            eog_feature = eog_feature.transpose(1, 2)
         if ppg is not None:
             ppg_feature = self.ppgEncoder(ppg)
             if self.bb_cfg['dropout']:
                 ppg_feature = self.ppgDropout(ppg_feature)
-            ppg_feature = ppg_feature.transpose(1, 2)
 
         if hbo is not None:
             hbo_feature = self.hboEncoder(hbo)
             if self.bb_cfg['dropout']:
                 hbo_feature = self.hboDropout(hbo_feature)
-            hbo_feature = hbo_feature.transpose(1, 2)
+                
         if hb is not None:
             hb_feature = self.hbEncoder(hb)
             if self.bb_cfg['dropout']:
-                hb_feature = self.hbDropout(hb_feature)
-            hb_feature = hb_feature.transpose(1, 2)    
-                
-        # 3 conditions
-        fnirs_feature = None
-        if hbo is not None and hb is not None:
-            fnirs_feature = self.hbFusion(hbo_feature, hb_feature)
-        elif hbo is not None and hb is None:
-            fnirs_feature = hbo_feature
-        elif hbo is None and hb is not None:
-            fnirs_feature = hb_feature
-        
-        if fnirs_feature is not None:
-            if ppg is not None:
-                fnirs_feature = self.hboFusion(fnirs_feature, ppg_feature)
+                hb_feature = self.hbDropout(hb_feature)        
 
         outputs = []
-
-        if self.training_mode == 'pretrain':
-            for eeg_feature in eeg_features:
-                if eog is not None:
-                    eeg_feature = self.eogFusion(eeg_feature, eog_feature)
-                if ppg is not None:
-                    eeg_feature = self.ppg2EEGFusion(eeg_feature, ppg_feature)
-                if fnirs_feature is not None:
-                    if ppg is not None:
-                        eeg_feature = self.fnirs2EEGFusion(eeg_feature, fnirs_feature)
-                    else:
-                        if hbo is not None:
-                            eeg_feature = self.hboFusion(eeg_feature, fnirs_feature)
-                        else:
-                            eeg_feature = self.hbFusion(eeg_feature, fnirs_feature)
-                outputs.append(F.normalize(self.head(eeg_feature.transpose(1, 2))))
-            
-        elif self.training_mode in ['scratch', 'fullfinetune', 'freezefinetune']:
-            for eeg_feature in eeg_features:
-                if eog is not None:
-                    eeg_feature = self.eogFusion(eeg_feature, eog_feature)
-                if ppg is not None:
-                    eeg_feature = self.ppg2EEGFusion(eeg_feature, ppg_feature)
-                if fnirs_feature is not None:
-                    if ppg is not None:
-                        eeg_feature = self.fnirs2EEGFusion(eeg_feature, fnirs_feature)
-                    else:
-                        eeg_feature = self.hboFusion(eeg_feature, fnirs_feature)
-
-                outputs.append(self.classifier(eeg_feature))
-        else:
-            raise NotImplementedError
+        for eeg_feature in eeg_features:
+            if self.bb_cfg['dropout']:
+                eeg_feature = self.eegDropout(eeg_feature)
+            eeg_fusion_feature = []
+            eeg_fusion_feature.append(eeg_feature)
+            if eog is not None:
+                eeg_fusion_feature.append(self.eogFusion(eeg_feature, eog_feature))
+            if ppg is not None:
+                eeg_fusion_feature.append(self.ppgFusion(eeg_feature, ppg_feature))
+            if hbo is not None:
+                eeg_fusion_feature.append(self.hboFusion(eeg_feature, hbo_feature))
+            if hb is not None:
+                eeg_fusion_feature.append(self.hbFusion(eeg_feature, hb_feature))
+            eeg_feature = torch.concat(eeg_fusion_feature, dim=2)
+            eeg_feature = self.fc(eeg_feature)
+            if self.training_mode == 'pretrain':
+                    outputs.append(F.normalize(self.head(eeg_feature.transpose(1, 2))))
+                
+            elif self.training_mode in ['scratch', 'fullfinetune', 'freezefinetune']:
+                    outputs.append(self.classifier(eeg_feature))
+            else:
+                raise NotImplementedError
 
         return outputs
     

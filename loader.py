@@ -41,7 +41,7 @@ class EEGDataLoader(Dataset):
                 RandomDCShift(),
                 RandomZeroMasking(),
                 RandomAdditiveGaussianNoise(),
-                # RandomBandStopFilter(),
+                RandomBandStopFilter(),
             ],
             mode='full'
         )

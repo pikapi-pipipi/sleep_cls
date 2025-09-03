@@ -10,7 +10,7 @@
 
     "backbone": {
         "name": "SleePyCo",
-        "init_weights": true,
+        "init_weights": false,
         "dropout": false
     },
     "feature_pyramid": {
@@ -31,6 +31,18 @@
         "eeg_pos_enc": {
             "seq_len": 1200,
             "dropout": false
+        },
+        "ppg_pos_enc": {
+            "seq_len": 12,
+            "dropout": false
+        },
+        "hemo_pos_enc": {
+            "seq_len": 12,
+            "dropout": false
+        },
+        "eog_pos_enc": {
+            "seq_len": 48,
+            "dropout": false
         }
     },
 
@@ -44,7 +56,7 @@
     "training_params": {
         "mode": "pretrain",
         "max_epochs": 400,
-        "batch_size": 32,
+        "batch_size": 96,
         "target_lr": 0.0005,
         "weight_decay": 0.0001,
         "temperature": 0.07,

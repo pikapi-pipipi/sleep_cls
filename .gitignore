@@ -141,5 +141,5 @@ results/
 checkpoints/
 figs/
 dset/
-
+run.sh
 .whl

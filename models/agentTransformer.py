@@ -48,16 +48,16 @@ class PositionalEncoding(nn.Module):
 class AgentAttention(nn.Module):
     def __init__(self, d_model, nheads, pool_size_rate, qkv_bias=True, dropout=0):
         super(AgentAttention, self).__init__()
-        # self.sub_n = 0
         self.dim = d_model
         self.nheads = nheads
         self.dropout = nn.Dropout(dropout)
         head_dim = d_model // nheads
         self.scale =  head_dim ** -0.5
         self.q = nn.Linear(d_model, d_model, bias=qkv_bias)
+        self.kv = nn.Linear(d_model, d_model * 2, bias=qkv_bias)
         self.proj = nn.Linear(d_model, d_model)
         self.softmax = nn.Softmax(dim=-1)
-        pool_size_rate = pool_size_rate
+        self.pool_size_rate = pool_size_rate
         self.pool = nn.MaxPool1d(pool_size_rate, pool_size_rate)
         
     def forward(self, x):
@@ -66,58 +66,20 @@ class AgentAttention(nn.Module):
         q = self.q(x).view(b, n, d)
         # q, k, v: b, n, d  
         agent_tokens = self.pool(x.permute(0, 2, 1)).permute(0, 2, 1)
+        k, v = self.kv(agent_tokens).view(b, n // self.pool_size_rate, 2, d).permute(2, 0, 1, 3)
         q = q.reshape(b, n, self.nheads, head_dim).permute(0, 2, 1, 3)
-        agent_tokens = agent_tokens.reshape(b, -1, self.nheads, head_dim).permute(0, 2, 1, 3)
+        k = k.reshape(b, n // self.pool_size_rate, self.nheads, head_dim).permute(0, 2, 1, 3)
+        v = v.reshape(b, n // self.pool_size_rate, self.nheads, head_dim).permute(0, 2, 1, 3)
         
-        q_attn = self.softmax((q * self.scale) @ agent_tokens.transpose(-2, -1))
+        q_attn = self.softmax((q * self.scale) @ k.transpose(-2, -1))
         q_attn = self.dropout(q_attn)
-        x = q_attn @ agent_tokens
+        x = q_attn @ v
         
         x = x.transpose(1, 2).reshape(b, n, d)
         
         x = self.proj(x)
         
         return x
-# class AgentAttention(nn.Module):
-#     def __init__(self, d_model, nheads, qkv_bias=True, dropout=0):
-#         super(AgentAttention, self).__init__()
-#         self.dim = d_model
-#         self.nheads = nheads
-#         self.dropout = nn.Dropout(dropout)
-#         head_dim = d_model // nheads
-#         self.scale =  head_dim ** -0.5
-#         self.qkv = nn.Linear(d_model, d_model*3, bias=qkv_bias)
-#         self.proj = nn.Linear(d_model, d_model)
-#         self.softmax = nn.Softmax(dim=-1)
-#         pool_size_rate = 6
-#         self.pool = nn.MaxPool1d(pool_size_rate, pool_size_rate)
-        
-#     def forward(self, x):
-#         b, n, d = x.size()
-#         head_dim = d // self.nheads
-#         qkv = self.qkv(x).view(b, n, 3, d).permute(2, 0, 1, 3)
-#         q, k, v = qkv[0], qkv[1], qkv[2]
-#         # q, k, v: b, n, d  
-#         agent_tokens = self.pool(x.permute(0, 2, 1)).permute(0, 2, 1)
-#         q = q.reshape(b, n, self.nheads, head_dim).permute(0, 2, 1, 3)
-#         k = k.reshape(b, n, self.nheads, head_dim).permute(0, 2, 1, 3)
-#         v = v.reshape(b, n, self.nheads, head_dim).permute(0, 2, 1, 3)
-#         agent_tokens = agent_tokens.reshape(b, -1, self.nheads, head_dim).permute(0, 2, 1, 3)
-        
-#         agent_attn = self.softmax((agent_tokens * self.scale) @ k.transpose(-2, -1))
-#         agent_attn = self.dropout(agent_attn)
-#         agent_attn = agent_attn @ v
-        
-#         q_attn = self.softmax((q * self.scale) @ agent_tokens.transpose(-2, -1))
-#         q_attn = self.dropout(q_attn)
-#         x = q_attn @ agent_tokens
-        
-#         x = x.transpose(1, 2).reshape(b, n, d)
-#         # v = v.transpose(1, 2).reshape(b, n, d)
-        
-#         x = self.proj(x)
-        
-#         return x
 
 class AgentTransformerLayer(nn.Module):
     def __init__(self, d_model, nheads, pool_size_rate, dim_feedforward=512, dropout=0):
@@ -188,9 +150,9 @@ class AgentTransformer(nn.Module):
         return x
     
 if __name__ == '__main__':
-    x = torch.randn(32, 50, 128)
+    x = torch.randn(32, 48, 128)
     config = {
-        'classifier': {
+        'Transformer': {
             'model_dim': 128,
             'feedforward_dim': 512,
             'dropout': 0.1,
@@ -208,7 +170,7 @@ if __name__ == '__main__':
             'mode': 'pretrain'
         }
     }
-    model = AgentTransformer(config, 8, 6, pool='mean')
+    model = AgentTransformer(config, 8, 6, pool_size_rate=6, seq_len=12, pos_enc_dropout=0.1)
     out = model(x)
     print(out.shape)
     

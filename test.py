@@ -80,7 +80,7 @@ class OneFoldEvaluator(OneFoldTrainer):
     def run(self):
         if self.local_rank == 0:
             print('\n[INFO] Fold: {}'.format(self.fold))
-        self.model.load_state_dict(torch.load(os.path.join(self.ckpt_path, self.ckpt_name)))
+        self.model.load_state_dict(torch.load(os.path.join(self.ckpt_path, self.ckpt_name), weights_only=False))
         y_true, y_pred = self.evaluate(mode='test')
         print('')
 
