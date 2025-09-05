@@ -33,7 +33,7 @@ class EEGBackbone(nn.Module):
         self.training_mode = config['training_params']['mode']
 
         # architecture
-        self.init_layer = self.make_layers(in_channels=1, out_channels=64, n_layers=2, maxpool_size=None, kernel_size=kernel_size, first=True)
+        self.init_layer = self.make_layers(in_channels=2 if config['dataset']['multimodal'][4] else 1, out_channels=64, n_layers=2, maxpool_size=None, kernel_size=kernel_size, first=True)
         self.layer1 = self.make_layers(in_channels=64, out_channels=128, n_layers=2, maxpool_size=5, kernel_size=kernel_size)
         self.layer2 = self.make_layers(in_channels=128, out_channels=192, n_layers=3, maxpool_size=5, kernel_size=kernel_size)
         self.layer3 = self.make_layers(in_channels=192, out_channels=256, n_layers=3, maxpool_size=5, kernel_size=kernel_size)

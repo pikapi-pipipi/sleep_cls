@@ -114,7 +114,7 @@ class OneFoldTrainer:
         length_load = 0
         self.loader_dict['train'].sampler.set_epoch(epoch)
 
-        for i, (eeg, hbo, hb, ppg, eog, labels) in enumerate(self.loader_dict['train']):
+        for i, (eeg, hbo, hb, ppg, labels) in enumerate(self.loader_dict['train']):
             loss = 0
             loss1 = 0
             labels = labels.view(-1).to(self.device)
@@ -127,23 +127,19 @@ class OneFoldTrainer:
             # inputs = torch.cat([inputs[0], inputs[1]], dim=0).to(self.device)
             eeg = torch.cat([eeg[0], eeg[1]], dim=0).to(self.device)
             if self.multimodal[1]:
-                hbo = torch.cat([hbo, hbo], dim=0).to(self.device)
+                hbo = torch.cat([hbo[0], hbo[1]], dim=0).to(self.device)
             else:
                 hbo = None
             if self.multimodal[2]:
-                hb = torch.cat([hb, hb], dim=0).to(self.device)
+                hb = torch.cat([hb[0], hb[1]], dim=0).to(self.device)
             else:
                 hb = None
             if self.multimodal[3]:
-                ppg = torch.cat([ppg, ppg], dim=0).to(self.device)
+                ppg = torch.cat([ppg[0], ppg[1]], dim=0).to(self.device)
             else:    
                 ppg = None
-            if self.multimodal[4]:
-                eog = torch.cat([eog, eog], dim=0).to(self.device)
-            else:
-                eog = None
 
-            outputs = self.model(eeg=eeg, hbo=hbo, hb=hb, ppg=ppg, eog=eog)
+            outputs = self.model(eeg=eeg, hbo=hbo, hb=hb, ppg=ppg)
 
             for j in range(len(outputs)):
                 f1, f2 = torch.split(outputs[j], [labels.size(0), labels.size(0)], dim=0)
@@ -185,10 +181,9 @@ class OneFoldTrainer:
         self.model.eval()
         eval_loss = 0
 
-        for i, (eeg, hbo, hb, ppg, eog, labels) in enumerate(self.loader_dict[mode]):
+        for i, (eeg, hbo, hb, ppg, labels) in enumerate(self.loader_dict[mode]):
             loss = 0
             loss1 = 0
-            # inputs = inputs.to(self.device)
             labels = labels.view(-1).to(self.device)
             world_size = dist.get_world_size()
             all_labels = torch.cat(all_gather(labels), dim=0) 
@@ -205,11 +200,8 @@ class OneFoldTrainer:
                 ppg = ppg.to(self.device)
             else:
                 ppg = None
-            if self.multimodal[4]:
-                eog = eog.to(self.device)
-            else:
-                eog = None
-            outputs = self.model(eeg=eeg, hbo=hbo, hb=hb, ppg=ppg, eog=eog)
+                
+            outputs = self.model(eeg=eeg, hbo=hbo, hb=hb, ppg=ppg)
 
             for j in range(len(outputs)):
                 features = outputs[j]

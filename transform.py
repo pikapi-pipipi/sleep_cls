@@ -150,6 +150,21 @@ class RandomBandStopFilter:
     def __repr__(self):
         return self.__class__.__name__ + '()'
     
+
+class ChannelShuffle:
+    
+    def __init__(self):
+        pass
+    
+    def __call__(self, x):
+        idx = np.arange(x.shape[0])
+        np.random.shuffle(idx)
+        return x[idx]
+
+    def __repr__(self):
+        return self.__class__.__name__ + '()'
+
+    
 if __name__ == '__main__':
     transform = Compose(
         transforms=[

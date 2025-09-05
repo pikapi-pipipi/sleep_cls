@@ -1,19 +1,19 @@
-import numpy as np
-import os 
-from collections import Counter
-import matplotlib.pyplot as plt
+# import numpy as np
+# import os 
+# from collections import Counter
+# import matplotlib.pyplot as plt
 
-count_label = np.array([])
-for file in os.listdir('./dset/EFSleep/npz/Fpz'):
-    if file.endswith('.npz'):
-        data = np.load(os.path.join('./dset/EFSleep/npz/Fpz', file))
-        # Process the data as needed
-        count_label = np.concatenate((count_label, data['label']))
-        print(data['fnirs_max_score_index'])
+# count_label = np.array([])
+# for file in os.listdir('./dset/EFSleep/npz/Fpz'):
+#     if file.endswith('.npz'):
+#         data = np.load(os.path.join('./dset/EFSleep/npz/Fpz', file))
+#         # Process the data as needed
+#         count_label = np.concatenate((count_label, data['label']))
+#         print(data['fnirs_max_score_index'])
 
-count_label = dict(Counter(count_label))
-print(count_label)
-print(np.array(list(count_label.values())) / np.array(list(count_label.values())).sum() * 100)
+# count_label = dict(Counter(count_label))
+# print(count_label)
+# print(np.array(list(count_label.values())) / np.array(list(count_label.values())).sum() * 100)
 
 # os.makedirs('./figs', exist_ok=True)
 # data = np.load(os.path.join('./dset/EFSleep/npz/Fpz', "S02D2.npz"))
@@ -119,3 +119,47 @@ print(np.array(list(count_label.values())) / np.array(list(count_label.values())
 #             bbox_inches='tight', pad_inches=0.02)
 # plt.savefig("confusion_matrice.pdf",
 #             bbox_inches='tight', pad_inches=0.02)
+
+import torch
+import torch.nn as nn
+class NeuralModulation(nn.Module):
+    def __init__(self, hidden_dim=128):
+        super().__init__()
+        # 用打分生成调制参数
+        self.mlp = nn.Sequential(
+            nn.Linear(80, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim * 2)  # 输出 gamma 和 beta
+        )
+    
+    def forward(self, x, scores):
+        # x: (batch, seq_len, features)
+        # scores: (batch, 10)
+        gamma, beta = self.mlp(scores).chunk(2, dim=-1)  # 拆分成 gamma & beta
+        print(gamma.unsqueeze(1).shape, beta.unsqueeze(1).shape, x.shape)
+        return x * gamma.unsqueeze(1) + beta.unsqueeze(1)  # 广播到序列维度
+
+# 在 Transformer 或 CNN 中使用：
+class MyModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.modulation = NeuralModulation()
+        self.conv = nn.Conv1d(8, 128, kernel_size=3, padding=1)  # 示例卷积层
+    
+    def forward(self, x, scores):
+        x = self.conv(x)  # (batch, 128, seq_len)
+        x = x.transpose(1, 2)  # (batch, seq_len, 128)
+        x = self.modulation(x, scores)  # 神经调制
+        return x
+    
+if __name__ == "__main__":
+
+    batch_size = 4
+    seq_len = 7500
+    features = 1
+    scores = torch.randn(batch_size, 80)  # 模拟打分输入
+    x = torch.randn(batch_size, 8, seq_len)  # 模拟输入数据
+
+    model = MyModel()
+    output = model(x, scores)
+    print(output.shape)  # (batch_size, seq_len, 32)

@@ -47,6 +47,8 @@ class EEGDataLoader(Dataset):
         )
         self.two_transform = TwoTransform(self.transform)
         
+        self.fnirs_transform = TwoTransform(ChannelShuffle())
+        
     def __len__(self):
         return len(self.epochs)
 
@@ -72,31 +74,45 @@ class EEGDataLoader(Dataset):
             if self.training_mode == 'pretrain':
                 assert seq_len == self.seq_len
                 eegs = eegs.reshape(-1, eeg_n_sample)
-                if hbos is not None:
-                    hbos = hbos.reshape(-1, hbo_n_sample)
-                    hbos = torch.from_numpy(hbos).float()
-                else:
-                    hbos = [0]
-                if hbs is not None:
-                    hbs = hbs.reshape(-1, hb_n_sample)
-                    hbs = torch.from_numpy(hbs).float()
-                else:
-                    hbs = [0]
-                if ppgs is not None:
-                    ppgs = ppgs.reshape(-1, ppg_n_sample)
-                    ppgs = torch.from_numpy(ppgs).float()
-                else:
-                    ppgs = [0]
-                if eogs is not None:
-                    eogs = eogs.reshape(-1, eog_n_sample)
-                    eogs = torch.from_numpy(eogs).float()
-                else:
-                    eogs = [0]
-
                 input_a, input_b = self.two_transform(eegs)
                 input_a = torch.from_numpy(input_a).float()
                 input_b = torch.from_numpy(input_b).float()
                 eegs = [input_a, input_b]
+                
+                if hbos is not None:
+                    hbos = hbos.reshape(-1, hbo_n_sample)
+                    input_a, input_b = self.fnirs_transform(hbos)
+                    input_a = torch.from_numpy(input_a).float()
+                    input_b = torch.from_numpy(input_b).float()
+                    hbos = [input_a, input_b]
+                else:
+                    hbos = [0]
+                    
+                if hbs is not None:
+                    hbs = hbs.reshape(-1, hb_n_sample)
+                    input_a, input_b = self.fnirs_transform(hbs)
+                    input_a = torch.from_numpy(input_a).float()
+                    input_b = torch.from_numpy(input_b).float()
+                    hbs = [input_a, input_b]
+                else:
+                    hbs = [0]
+                if ppgs is not None:
+                    ppgs = ppgs.reshape(-1, ppg_n_sample)
+                    input_a, input_b = self.fnirs_transform(ppgs)
+                    input_a = torch.from_numpy(input_a).float()
+                    input_b = torch.from_numpy(input_b).float()
+                    ppgs = [input_a, input_b]
+                else:
+                    ppgs = [0]
+                    
+                if eogs is not None:
+                    eogs = eogs.reshape(-1, eog_n_sample)
+                    eogs = torch.from_numpy(eogs).float()
+                    eegs[0] = torch.cat((eegs[0], eogs), dim=0)
+                    eegs[1] = torch.cat((eegs[1], eogs), dim=0)
+                else:
+                    eogs = [0]
+                    
             
             elif self.training_mode in ['scratch', 'fullyfinetune', 'freezefinetune']:
 
@@ -120,6 +136,7 @@ class EEGDataLoader(Dataset):
                 if eogs is not None:
                     eogs = eogs.reshape(-1, eog_n_sample)
                     eogs = torch.from_numpy(eogs).float()
+                    eegs = torch.cat((eegs, eogs), dim=0)
                 else:
                     eogs = [0]
                     
@@ -144,17 +161,17 @@ class EEGDataLoader(Dataset):
                 ppgs = torch.from_numpy(ppgs).float()
             else:
                 ppgs = [0]
+                
             if eogs is not None:
                 eogs = eogs.reshape(-1, eog_n_sample)
                 eogs = torch.from_numpy(eogs).float()
-            else:
-                eogs = [0]
+                eegs = torch.cat((eegs, eogs), dim=0)
 
         labels = self.labels[file_idx][idx:idx+seq_len]
         labels = torch.from_numpy(labels).long()
         labels = labels[self.target_idx]
 
-        return eegs, hbos, hbs, ppgs, eogs, labels
+        return eegs, hbos, hbs, ppgs, labels
 
     def split_dataset(self):
 
@@ -221,8 +238,8 @@ if __name__ == '__main__':
     fold = 1
     dset = EEGDataLoader(config, fold, set='train')
     loader = torch.utils.data.DataLoader(dset, batch_size=32, shuffle=True)
-    for i, (eegs, fnirss, labels) in enumerate(loader):
-        print(eegs.shape)
-        print(fnirss.shape)
+    for i, (eeg, hbo, hb, ppg, eog, labels) in enumerate(loader):
+        print(eeg.shape)
+        print(hbo.shape)
         print(labels.shape)
         break

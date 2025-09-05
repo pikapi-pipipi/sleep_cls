@@ -61,7 +61,7 @@ class OneFoldTrainer:
         self.start_counter_epochs = 0
         self.model = self.build_model()
         self.loader_dict = self.build_dataloader()
-        
+
         self.save_Train_Loss = []
         self.save_Val_Loss = []
         if self.local_rank == 0:
@@ -133,9 +133,9 @@ class OneFoldTrainer:
         self.model.train()
         if self.tp_cfg['mode'] == 'freezefinetune':
             if self.local_rank == 0:
-                logger.info('[INFO] Freeze backone')
-            self.model.module.train(False)
-            for p in self.model.module.parameters():
+                logger.info('[INFO] Freeze backbone')
+            self.model.module.encoder.train(False)
+            for p in self.model.module.encoder.parameters():
                 p.requires_grad = False
             self.model.module.classifier.train(True)
             for p in self.model.module.classifier.parameters():
@@ -153,7 +153,7 @@ class OneFoldTrainer:
         self.loader_dict['train'].sampler.set_epoch(epoch)
         params_to_clip = [p for p in self.model.parameters() if p.requires_grad]
 
-        for i, (eeg, hbo, hb, ppg, eog, labels) in enumerate(self.loader_dict['train']):
+        for i, (eeg, hbo, hb, ppg, labels) in enumerate(self.loader_dict['train']):
             loss = 0
             total += labels.size(0)
             # inputs = inputs.to(self.device)
@@ -173,12 +173,8 @@ class OneFoldTrainer:
                 ppg = ppg.to(self.device)
             else:
                 ppg = None
-            if self.multimodal[4]:
-                eog = eog.to(self.device)
-            else:
-                eog = None
 
-            outputs = self.model(eeg=eeg, hbo=hbo, hb=hb, ppg=ppg, eog=eog)
+            outputs = self.model(eeg=eeg, hbo=hbo, hb=hb, ppg=ppg)
 
             outputs_sum = torch.zeros_like(outputs[0])
             for j in range(len(outputs)):
@@ -189,6 +185,9 @@ class OneFoldTrainer:
             loss.backward()
             nn_utils.clip_grad_norm_(params_to_clip, max_norm=1.0)
             self.optimizer.step()
+            # for name, param in self.model.named_parameters():
+            #     if param.grad is None:
+            #         print(f"Parameter {name} is not used in the computation graph.")
 
             self.train_loss += loss.item()
             total_loss = loss.to(self.local_rank)
@@ -236,7 +235,7 @@ class OneFoldTrainer:
         y_true = np.zeros(0)
         y_pred = np.zeros((0, self.cfg['classifier']['num_classes']))
 
-        for i, (eeg, hbo, hb, ppg, eog, labels) in enumerate(self.loader_dict[mode]):
+        for i, (eeg, hbo, hb, ppg, labels) in enumerate(self.loader_dict[mode]):
             loss = 0
             total += labels.size(0)
             # inputs = inputs.to(self.device)
@@ -255,12 +254,8 @@ class OneFoldTrainer:
                 ppg = ppg.to(self.device)
             else:
                 ppg = None
-            if self.multimodal[4]:
-                eog = eog.to(self.device)
-            else:
-                eog = None
 
-            outputs = self.model(eeg=eeg, hbo=hbo, hb=hb, ppg=ppg, eog=eog)
+            outputs = self.model(eeg=eeg, hbo=hbo, hb=hb, ppg=ppg)
 
             outputs_sum = torch.zeros_like(outputs[0])
             for j in range(len(outputs)):
