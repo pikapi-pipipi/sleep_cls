@@ -157,9 +157,13 @@ class ChannelShuffle:
         pass
     
     def __call__(self, x):
-        idx = np.arange(x.shape[0])
+        idx = np.arange(x.shape[0] // 2)
         np.random.shuffle(idx)
-        return x[idx]
+        new_idx = []
+        for i in idx:
+            new_idx.append(2 * i)
+            new_idx.append(2 * i + 1)
+        return x[new_idx]
 
     def __repr__(self):
         return self.__class__.__name__ + '()'

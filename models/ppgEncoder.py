@@ -53,8 +53,8 @@ class PPGBackbone(nn.Module):
         self.training_mode = config['training_params']['mode']
 
         # architecture
-        self.init_layer = self.make_layers(in_channels=16, out_channels=32, n_layers=1, maxpool_size=None, kernel_size=kernel_size, first=True)
-        self.layer1 = self.make_layers(in_channels=32, out_channels=64, n_layers=1, maxpool_size=5, kernel_size=kernel_size)
+        self.init_layer = self.make_layers(in_channels=32, out_channels=64, n_layers=1, maxpool_size=None, kernel_size=kernel_size, first=True)
+        self.layer1 = self.make_layers(in_channels=64, out_channels=64, n_layers=1, maxpool_size=5, kernel_size=kernel_size)
         self.layer2 = self.make_layers(in_channels=64, out_channels=96, n_layers=1, maxpool_size=5, kernel_size=kernel_size)
         self.layer3 = self.make_layers(in_channels=96, out_channels=128, n_layers=1, maxpool_size=5, kernel_size=kernel_size)
         self.layer4 = self.make_layers(in_channels=128, out_channels=128, n_layers=1, maxpool_size=5, kernel_size=kernel_size)

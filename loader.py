@@ -31,7 +31,7 @@ class EEGDataLoader(Dataset):
         self.training_mode = config['training_params']['mode']
 
         self.dataset_path = os.path.join(self.root_dir, 'dset', self.dset_name, 'npz')
-        self.eeg, self.hbo, self.hb, self.ppg, self.eog, self.labels, self.epochs = self.split_dataset()
+        self.eeg, self.hbo, self.hb, self.ppg, self.eog, self.labels, self.score, self.epochs = self.split_dataset()
 
 
         self.transform = Compose(
@@ -60,6 +60,12 @@ class EEGDataLoader(Dataset):
         eog_n_sample = 30 * self.eog_sr * self.seq_len
         file_idx, idx, seq_len = self.epochs[idx]
         eegs = self.eeg[file_idx][idx:idx+seq_len]
+    
+        # if self.score:
+        #     scores = self.score[file_idx][idx:idx+seq_len] 
+        #     scores = np.array(scores).transpose((1,0))  # (n_modalities, seq_len)
+        #     scores = np.repeat(scores, repeats=750, axis=-1)
+        
         hbos, hbs, ppgs, eogs = None, None, None, None
         if self.hbo:
             hbos = self.hbo[file_idx][idx:idx+seq_len]
@@ -81,6 +87,8 @@ class EEGDataLoader(Dataset):
                 
                 if hbos is not None:
                     hbos = hbos.reshape(-1, hbo_n_sample)
+                    # hbos = np.stack((hbos, scores), axis=0)
+                    # hbos = hbos.reshape(-1, hbo_n_sample)
                     input_a, input_b = self.fnirs_transform(hbos)
                     input_a = torch.from_numpy(input_a).float()
                     input_b = torch.from_numpy(input_b).float()
@@ -90,6 +98,8 @@ class EEGDataLoader(Dataset):
                     
                 if hbs is not None:
                     hbs = hbs.reshape(-1, hb_n_sample)
+                    # hbs = np.stack((hbs, scores), axis=0)
+                    # hbs = hbs.reshape(-1, hb_n_sample)
                     input_a, input_b = self.fnirs_transform(hbs)
                     input_a = torch.from_numpy(input_a).float()
                     input_b = torch.from_numpy(input_b).float()
@@ -98,6 +108,9 @@ class EEGDataLoader(Dataset):
                     hbs = [0]
                 if ppgs is not None:
                     ppgs = ppgs.reshape(-1, ppg_n_sample)
+                    # scores = np.repeat(scores, repeats=2, axis=0)
+                    # ppgs = np.stack((ppgs, scores), axis=0)
+                    # ppgs = ppgs.reshape(-1, ppg_n_sample)
                     input_a, input_b = self.fnirs_transform(ppgs)
                     input_a = torch.from_numpy(input_a).float()
                     input_b = torch.from_numpy(input_b).float()
@@ -120,16 +133,23 @@ class EEGDataLoader(Dataset):
                 eegs = torch.from_numpy(eegs).float()
                 if hbos is not None:
                     hbos = hbos.reshape(-1, hbo_n_sample)
+                    # hbos = np.stack((hbos, scores), axis=0)
+                    # hbos = hbos.reshape(-1, hbo_n_sample)
                     hbos = torch.from_numpy(hbos).float()
                 else:
                     hbos = [0]
                 if hbs is not None:
                     hbs = hbs.reshape(-1, hb_n_sample)
+                    # hbs = np.stack((hbs, scores), axis=0)
+                    # hbs = hbs.reshape(-1, hb_n_sample)
                     hbs = torch.from_numpy(hbs).float()
                 else:
                     hbs = [0]
                 if ppgs is not None:
                     ppgs = ppgs.reshape(-1, ppg_n_sample)
+                    # scores = np.repeat(scores, repeats=2, axis=0)
+                    # ppgs = np.stack((ppgs, scores), axis=0)
+                    # ppgs = ppgs.reshape(-1, ppg_n_sample)
                     ppgs = torch.from_numpy(ppgs).float()
                 else:
                     ppgs = [0]
@@ -148,16 +168,23 @@ class EEGDataLoader(Dataset):
             eegs = torch.from_numpy(eegs).float()
             if hbos is not None:
                 hbos = hbos.reshape(-1, hbo_n_sample)
+                # hbos = np.stack((hbos, scores), axis=0)
+                # hbos = hbos.reshape(-1, hbo_n_sample)
                 hbos = torch.from_numpy(hbos).float()
             else:
                 hbos = [0]
             if hbs is not None:
                 hbs = hbs.reshape(-1, hb_n_sample)
+                # hbs = np.stack((hbs, scores), axis=0)
+                # hbs = hbs.reshape(-1, hb_n_sample)
                 hbs = torch.from_numpy(hbs).float()
             else:
                 hbs = [0]
             if ppgs is not None:
                 ppgs = ppgs.reshape(-1, ppg_n_sample)
+                # scores = np.repeat(scores, repeats=2, axis=0)
+                # ppgs = np.stack((ppgs, scores), axis=0)
+                # ppgs = ppgs.reshape(-1, ppg_n_sample)
                 ppgs = torch.from_numpy(ppgs).float()
             else:
                 ppgs = [0]
@@ -177,6 +204,7 @@ class EEGDataLoader(Dataset):
 
         file_idx = 0
         eeg, hbo, hb, ppg, eog, labels, epochs = [], [], [], [], [], [], []
+        score = []
         data_root = os.path.join(self.dataset_path, self.eeg_channel)
         data_fname_list = [os.path.basename(x) for x in sorted(glob.glob(os.path.join(data_root, '*.npz')))]
         data_fname_dict = {'train': [], 'test': [], 'val': []}
@@ -205,6 +233,8 @@ class EEGDataLoader(Dataset):
                 eog.append(npz_file['eog'])
                 
             labels.append(npz_file['label'])
+            if self.multimodal[1] or self.multimodal[2] or self.multimodal[3]:
+                score.append(npz_file['score'])
             seq_len = self.seq_len
             for i in range(len(npz_file['label']) - seq_len + 1):
                 epochs.append([file_idx, i, seq_len])
@@ -218,7 +248,7 @@ class EEGDataLoader(Dataset):
         if not eog:
             eog = None
 
-        return eeg, hbo, hb, ppg, eog, labels, epochs
+        return eeg, hbo, hb, ppg, eog, labels, score, epochs
 
 if __name__ == '__main__':
     config = {
@@ -238,8 +268,10 @@ if __name__ == '__main__':
     fold = 1
     dset = EEGDataLoader(config, fold, set='train')
     loader = torch.utils.data.DataLoader(dset, batch_size=32, shuffle=True)
-    for i, (eeg, hbo, hb, ppg, eog, labels) in enumerate(loader):
+    for i, (eeg, hbo, hb, ppg, labels) in enumerate(loader):
         print(eeg.shape)
         print(hbo.shape)
+        print(hb.shape)
+        print(ppg.shape)
         print(labels.shape)
         break

@@ -45,42 +45,52 @@ class Encoder(nn.Module):
                 self.ppgDropout = nn.Dropout(p=0.1)
                 
         if self.multimodal[1] or self.multimodal[2] or self.multimodal[3]:
-            self.fc = nn.Linear(self.cfg['feature_pyramid']['dim'] * 2, last_chn_dict[config['backbone']['name']])
+            self.Ffc = nn.Linear(self.cfg['feature_pyramid']['dim'] * sum(self.multimodal[1:4]), last_chn_dict[config['backbone']['name']])
+            self.Efc = nn.Linear(self.cfg['feature_pyramid']['dim'] * (sum(self.multimodal[1:4])+1), last_chn_dict[config['backbone']['name']])
         # self.sequence_modeling = ModalFusion(self.cfg)
 
     def forward(self, eeg=None, hbo=None, hb=None, ppg=None):
 
         eeg_features = self.eegEncoder(eeg)
+        if self.multimodal[1] or self.multimodal[2] or self.multimodal[3]:
+            fnirs_feature = []
         
         if ppg is not None:
             ppg_feature = self.ppgEncoder(ppg)
             if self.bb_cfg['dropout']:
                 ppg_feature = self.ppgDropout(ppg_feature)
+            fnirs_feature.append(ppg_feature)
 
         if hbo is not None:
             hbo_feature = self.hboEncoder(hbo)
             if self.bb_cfg['dropout']:
                 hbo_feature = self.hboDropout(hbo_feature)
+            fnirs_feature.append(hbo_feature)
                 
         if hb is not None:
             hb_feature = self.hbEncoder(hb)
             if self.bb_cfg['dropout']:
-                hb_feature = self.hbDropout(hb_feature)        
+                hb_feature = self.hbDropout(hb_feature)
+            fnirs_feature.append(hb_feature)        
 
         outputs = []
+        if self.multimodal[1] or self.multimodal[2] or self.multimodal[3]:
+            fnirs_feature = self.Ffc(torch.concat(fnirs_feature, dim=2))
+            
         for eeg_feature in eeg_features:
             if self.bb_cfg['dropout']:
                 eeg_feature = self.eegDropout(eeg_feature)
-            eeg_fusion_feature = eeg_feature
+            eeg_fusion_feature = [eeg_feature]
             if ppg is not None:
-                eeg_fusion_feature = self.ppgFusion(eeg_fusion_feature, ppg_feature)
+                eeg_fusion_feature.append(self.ppgFusion(eeg_feature, ppg_feature))
             if hbo is not None:
-                eeg_fusion_feature = self.hboFusion(eeg_fusion_feature, hbo_feature)
+                eeg_fusion_feature.append(self.hboFusion(eeg_feature, hbo_feature))
             if hb is not None:
-                eeg_fusion_feature = self.hbFusion(eeg_fusion_feature, hb_feature)
+                eeg_fusion_feature.append(self.hbFusion(eeg_feature, hb_feature))
             if self.multimodal[1] or self.multimodal[2] or self.multimodal[3]:
-                eeg_feature = torch.concat([eeg_fusion_feature, eeg_feature], dim=2)
-                eeg_feature = self.fc(eeg_feature)
+                eeg_feature = torch.concat(eeg_fusion_feature, dim=2)
+                eeg_feature = self.Efc(eeg_feature)
+                eeg_feature = torch.concat([eeg_feature, fnirs_feature], dim=1)
             # eeg_feature = self.sequence_modeling(eeg_feature, eeg_feature)
             outputs.append(eeg_feature)
         return outputs

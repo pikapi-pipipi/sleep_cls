@@ -119,47 +119,20 @@
 #             bbox_inches='tight', pad_inches=0.02)
 # plt.savefig("confusion_matrice.pdf",
 #             bbox_inches='tight', pad_inches=0.02)
+import numpy as np
 
-import torch
-import torch.nn as nn
-class NeuralModulation(nn.Module):
-    def __init__(self, hidden_dim=128):
-        super().__init__()
-        # 用打分生成调制参数
-        self.mlp = nn.Sequential(
-            nn.Linear(80, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim * 2)  # 输出 gamma 和 beta
-        )
-    
-    def forward(self, x, scores):
-        # x: (batch, seq_len, features)
-        # scores: (batch, 10)
-        gamma, beta = self.mlp(scores).chunk(2, dim=-1)  # 拆分成 gamma & beta
-        print(gamma.unsqueeze(1).shape, beta.unsqueeze(1).shape, x.shape)
-        return x * gamma.unsqueeze(1) + beta.unsqueeze(1)  # 广播到序列维度
+a = np.zeros((8, 7500))  # 示例数组1 (8, 7500)
+b = np.ones((8, 7500))   # 示例数组2 (8, 7500)
 
-# 在 Transformer 或 CNN 中使用：
-class MyModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.modulation = NeuralModulation()
-        self.conv = nn.Conv1d(8, 128, kernel_size=3, padding=1)  # 示例卷积层
-    
-    def forward(self, x, scores):
-        x = self.conv(x)  # (batch, 128, seq_len)
-        x = x.transpose(1, 2)  # (batch, seq_len, 128)
-        x = self.modulation(x, scores)  # 神经调制
-        return x
-    
-if __name__ == "__main__":
+# 沿新维度堆叠并重塑
+merged = np.stack([a, b], axis=1)  # 形状 (8, 2, 7500)
+merged = merged.reshape(-1, 7500)   # 形状 (16, 7500)
+print(a)
+print(b)
+print(merged)
 
-    batch_size = 4
-    seq_len = 7500
-    features = 1
-    scores = torch.randn(batch_size, 80)  # 模拟打分输入
-    x = torch.randn(batch_size, 8, seq_len)  # 模拟输入数据
-
-    model = MyModel()
-    output = model(x, scores)
-    print(output.shape)  # (batch_size, seq_len, 32)
+# 验证
+print(merged[0] == a[0])  # 第0行来自a → True
+print(merged[1] == b[0])  # 第1行来自b → True
+print(merged[2] == a[1])  # 第2行来自a → True
+print(merged[3] == b[1])  # 第3行来自b → True
