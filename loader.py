@@ -47,8 +47,10 @@ class EEGDataLoader(Dataset):
         )
         self.two_transform = TwoTransform(self.transform)
         
-        self.fnirs_transform = TwoTransform(ChannelShuffle())
-        
+        # self.fnirs_transform = TwoTransform(ChannelShuffle())
+        self.fnirs_transform = TwoTransform(Compose(transforms=[ChannelShuffle(),
+                                                                FnirsRandomAmplitudeScale()]))
+
     def __len__(self):
         return len(self.epochs)
 
@@ -58,13 +60,14 @@ class EEGDataLoader(Dataset):
         hb_n_sample = 30 * self.hb_sr * self.seq_len
         ppg_n_sample = 30 * self.ppg_sr * self.seq_len
         eog_n_sample = 30 * self.eog_sr * self.seq_len
+        score_n_sample = 6 * self.seq_len
         file_idx, idx, seq_len = self.epochs[idx]
         eegs = self.eeg[file_idx][idx:idx+seq_len]
-    
+
         # if self.score:
-        #     scores = self.score[file_idx][idx:idx+seq_len] 
-        #     scores = np.array(scores).transpose((1,0))  # (n_modalities, seq_len)
-        #     scores = np.repeat(scores, repeats=750, axis=-1)
+        #     scores = self.score[file_idx][idx:idx+seq_len]
+        #     scores = np.array(scores).reshape(-1, score_n_sample) # (n_modalities, seq_len)
+        #     scores = np.repeat(scores, repeats=125, axis=-1)
         
         hbos, hbs, ppgs, eogs = None, None, None, None
         if self.hbo:
@@ -231,10 +234,10 @@ class EEGDataLoader(Dataset):
                 ppg.append(npz_file['ppg'])
             if self.multimodal[4]:
                 eog.append(npz_file['eog'])
-                
+            
             labels.append(npz_file['label'])
             if self.multimodal[1] or self.multimodal[2] or self.multimodal[3]:
-                score.append(npz_file['score'])
+                score.append(npz_file['score'])  # (n_modalities, seq_len, 8)
             seq_len = self.seq_len
             for i in range(len(npz_file['label']) - seq_len + 1):
                 epochs.append([file_idx, i, seq_len])
@@ -262,16 +265,16 @@ if __name__ == '__main__':
             'multimodal': [True, True, True, True, True]
         },
         'training_params': {
-            'mode': 'freezefinetune'
+            'mode': 'pretrain'
         }
     }
     fold = 1
     dset = EEGDataLoader(config, fold, set='train')
     loader = torch.utils.data.DataLoader(dset, batch_size=32, shuffle=True)
     for i, (eeg, hbo, hb, ppg, labels) in enumerate(loader):
-        print(eeg.shape)
-        print(hbo.shape)
-        print(hb.shape)
-        print(ppg.shape)
-        print(labels.shape)
+        print(eeg[0].shape)
+        print(hbo[0].shape)
+        print(hb[0].shape)
+        print(ppg[0].shape)
+        print(labels[0].shape)
         break

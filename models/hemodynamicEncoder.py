@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from .agentTransformer import PositionalEncoding, AgentTransformer
+from .modalFusion import ModalFusion
 
 class MaxPool1d(nn.Module):
     def __init__(self, maxpool_size):
@@ -78,25 +79,64 @@ class HemodynamicBackbone(nn.Module):
     def forward(self, x):
         x = self.init_layer(x)
         x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        c3 = self.layer2(x)
+        c4 = self.layer3(c3)
+        c5 = self.layer4(c4)
+
+        return c5, c4, c3
+    
+    
+class LatentEncoder(nn.Module):
+    def __init__(self, config):
+        super(LatentEncoder, self).__init__()
+        self.fp_dim = config['feature_pyramid']['dim']
+        self.num_scales = config['feature_pyramid']['num_scales']
+        self.conv_c5 = nn.Conv1d(128, self.fp_dim, 1, 1, 0)
+
+        if self.num_scales > 1:
+            self.conv_c4 = nn.Conv1d(128, self.fp_dim, 1, 1, 0)
         
-        return x
+        if self.num_scales > 2:
+            self.conv_c3 = nn.Conv1d(96, self.fp_dim, 1, 1, 0)
+            
+    
+    def forward(self, x):
+        out = []
+        c5, c4, c3 = x
+        c5 = self.conv_c5(c5)
+        out.append(c5)
+        if self.num_scales > 1:
+            c4 = self.conv_c4(c4)
+            out.append(c4)
+        if self.num_scales > 2:
+            c3 = self.conv_c3(c3)
+            out.append(c3)
+        
+        return out
+        
 
 class HemodynamicEncoder(nn.Module):
     def __init__(self, config):
         super(HemodynamicEncoder, self).__init__()
         self.cfg = config
         self.backbone = HemodynamicBackbone(config)
+        self.latent_layer = LatentEncoder(self.cfg)
+        self.condense1 = ModalFusion(self.cfg)
+        self.condense2 = ModalFusion(self.cfg)
         self.SeqAttn = AgentTransformer(config, 8, 4, pool_size_rate=1, 
                                         seq_len=config['Transformer']['hemo_pos_enc']['seq_len'],
                                         pos_enc_dropout=config['Transformer']['hemo_pos_enc']['dropout'])
 
     def forward(self, x):
-        return self.SeqAttn(self.backbone(x).transpose(1, 2))
-    
-    
+        c5, c4, c3 = self.latent_layer(self.backbone(x))
+        c3 = c3.transpose(1, 2)
+        c4 = c4.transpose(1, 2)
+        c5 = c5.transpose(1, 2)
+        c3 = self.condense1(c3, c4)
+        c3 = self.condense2(c3, c5)
+        return self.SeqAttn(c3)
+
+
 if __name__ == '__main__':
     config = {
         'feature_pyramid': {

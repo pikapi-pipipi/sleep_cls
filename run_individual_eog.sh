@@ -1,0 +1,4 @@
+torchrun --nproc_per_node=1 --master_port 40396 train_individual.py --config configs/SleePyCo-AgentTransformer_SL-10_numScales-3_EFSleep_private.json --gpu 1 --eeg 1 --hbo 1 --hb 1 --ppg 1 --eog 1
+torchrun --nproc_per_node=1 --master_port 40396 train_individual.py --config configs/SleePyCo-AgentTransformer_SL-10_numScales-3_EFSleep_private.json --gpu 1 --eeg 1 --hbo 0 --hb 0 --ppg 1 --eog 1
+torchrun --nproc_per_node=1 --master_port 40396 train_individual.py --config configs/SleePyCo-AgentTransformer_SL-10_numScales-3_EFSleep_private.json --gpu 1 --eeg 1 --hbo 1 --hb 1 --ppg 0 --eog 1
+torchrun --nproc_per_node=1 --master_port 40396 train_individual.py --config configs/SleePyCo-AgentTransformer_SL-10_numScales-3_EFSleep_private.json --gpu 1 --eeg 1 --hbo 0 --hb 0 --ppg 0 --eog 1

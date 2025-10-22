@@ -48,8 +48,8 @@
     "training_params": {
         "mode": "freezefinetune",
         "max_epochs": 400,
-        "batch_size": 512,
-        "target_lr": 0.0005,
+        "batch_size": 128,
+        "target_lr": 0.00005,
         "weight_decay": 0.000001,
         "val_period": 500,
         "early_stopping": {

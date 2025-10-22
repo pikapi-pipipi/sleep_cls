@@ -157,13 +157,29 @@ class ChannelShuffle:
         pass
     
     def __call__(self, x):
-        idx = np.arange(x.shape[0] // 2)
+        idx = np.arange(x.shape[0])
         np.random.shuffle(idx)
-        new_idx = []
-        for i in idx:
-            new_idx.append(2 * i)
-            new_idx.append(2 * i + 1)
-        return x[new_idx]
+        # new_idx = []
+        # for i in idx:
+        #     new_idx.append(2 * i)
+        #     new_idx.append(2 * i + 1)
+        return x[idx]
+
+    def __repr__(self):
+        return self.__class__.__name__ + '()'
+
+
+class FnirsRandomAmplitudeScale:
+
+    def __init__(self, range=(0.5, 2.0), p=0.5):
+        self.range = range
+        self.p = p
+
+    def __call__(self, x):
+        if torch.rand(1) < self.p:
+            scale = random.uniform(self.range[0], self.range[1])
+            return x * scale
+        return x
 
     def __repr__(self):
         return self.__class__.__name__ + '()'
