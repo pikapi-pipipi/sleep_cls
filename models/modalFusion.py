@@ -36,6 +36,13 @@ class ModalFusion(nn.Module):
             nn.PReLU(),
             nn.Linear(self.forward_dim, self.model_dim),
         )
+        # Dynamic gate for cross-modal feature fusion (CMFF)
+        self.gate = nn.Sequential(
+            nn.Linear(self.model_dim * 2, self.model_dim),
+            nn.PReLU(),
+            nn.Linear(self.model_dim, self.model_dim),
+            nn.Sigmoid()
+        )
         
     def forward(self, x1, x2):
         x1 = self.normx1(x1)
@@ -52,7 +59,9 @@ class ModalFusion(nn.Module):
         if self.config['Transformer']['dropout']:
             context = self.dropout(context)
 
-        context = self.normfc(context + x1)  # Residual connection
+        gate = self.gate(torch.concat([x1, context], dim=-1))
+        context = gate * context + (1.0 - gate) * x1
+        context = self.normfc(context + x1)
 
         context = self.feedforward(context) + context
 

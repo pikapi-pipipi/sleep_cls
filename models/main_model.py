@@ -90,14 +90,16 @@ class Encoder(nn.Module):
             if self.bb_cfg['dropout']:
                 eeg_feature = self.eegDropout(eeg_feature)
             eeg_fusion_feature = [eeg_feature]
+            eeg_backbone_enhanced = eeg_feature
+            if hbo is not None and hb is not None:
+                eeg_backbone_enhanced = self.fnirsFusion(eeg_feature, fnirs_feature)
+                eeg_fusion_feature.append(eeg_backbone_enhanced)
             if ppg is not None:
-                eeg_fusion_feature.append(self.ppgFusion(eeg_feature, ppg_feature))
+                eeg_fusion_feature.append(self.ppgFusion(eeg_backbone_enhanced, ppg_feature))
             # if hbo is not None:
             #     eeg_fusion_feature.append(self.hboFusion(eeg_feature, hbo_feature))
             # if hb is not None:
             #     eeg_fusion_feature.append(self.hbFusion(eeg_feature, hb_feature))
-            if hbo is not None and hb is not None:
-                eeg_fusion_feature.append(self.fnirsFusion(eeg_feature, fnirs_feature))
             if self.multimodal[1] or self.multimodal[2] or self.multimodal[3]:
                 eeg_feature = torch.concat(eeg_fusion_feature, dim=2)
                 eeg_feature = self.Efc(eeg_feature)

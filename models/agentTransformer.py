@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import math
 from torch.cuda.amp import autocast
 import torch.utils.checkpoint as checkpoint
@@ -46,7 +47,7 @@ class PositionalEncoding(nn.Module):
         return x
 
 class AgentAttention(nn.Module):
-    def __init__(self, d_model, nheads, pool_size_rate, qkv_bias=True, dropout=0):
+    def __init__(self, d_model, nheads, pool_size_rate, qkv_bias=True, dropout=0, head_strides=None):
         super(AgentAttention, self).__init__()
         self.dim = d_model
         self.nheads = nheads
@@ -59,30 +60,69 @@ class AgentAttention(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
         self.pool_size_rate = pool_size_rate
         self.pool = nn.MaxPool1d(pool_size_rate, pool_size_rate)
+        # Multi-scale head groups for MaxFormer
+        if head_strides is None or len(head_strides) == 0:
+            self.head_strides = [1, max(1, pool_size_rate), max(1, pool_size_rate * 2)]
+        else:
+            self.head_strides = [max(1, int(s)) for s in head_strides]
+        self.head_groups = self._build_head_groups()
+
+    def _build_head_groups(self):
+        num_groups = len(self.head_strides)
+        base = self.nheads // num_groups
+        rem = self.nheads % num_groups
+        groups = []
+        start = 0
+        for i in range(num_groups):
+            size = base + (1 if i < rem else 0)
+            end = start + size
+            groups.append(list(range(start, end)))
+            start = end
+        return groups
+
+    def _pool_tokens(self, x, stride):
+        if stride <= 1:
+            return x
+        b, n, d = x.size()
+        x_t = x.transpose(1, 2)
+        pad_size = (stride - (n % stride)) % stride
+        if pad_size > 0:
+            left_pad = pad_size // 2
+            right_pad = pad_size - left_pad
+            x_t = F.pad(x_t, (left_pad, right_pad), mode='constant', value=0.0)
+        pooled = F.max_pool1d(x_t, kernel_size=stride, stride=stride)
+        return pooled.transpose(1, 2)
         
     def forward(self, x):
         b, n, d = x.size()
         head_dim = d // self.nheads
-        q = self.q(x).view(b, n, d)
-        # q, k, v: b, n, d  
-        agent_tokens = self.pool(x.permute(0, 2, 1)).permute(0, 2, 1)
-        k, v = self.kv(agent_tokens).view(b, n // self.pool_size_rate, 2, d).permute(2, 0, 1, 3)
-        q = q.reshape(b, n, self.nheads, head_dim).permute(0, 2, 1, 3)
-        k = k.reshape(b, n // self.pool_size_rate, self.nheads, head_dim).permute(0, 2, 1, 3)
-        v = v.reshape(b, n // self.pool_size_rate, self.nheads, head_dim).permute(0, 2, 1, 3)
-        
-        q_attn = self.softmax((q * self.scale) @ k.transpose(-2, -1))
-        q_attn = self.dropout(q_attn)
-        x = q_attn @ v
-        
-        x = x.transpose(1, 2).reshape(b, n, d)
+        q = self.q(x).reshape(b, n, self.nheads, head_dim).permute(0, 2, 1, 3)
+        multi_scale_out = torch.zeros_like(q)
+
+        for head_ids, stride in zip(self.head_groups, self.head_strides):
+            if len(head_ids) == 0:
+                continue
+            agent_tokens = self._pool_tokens(x, stride)
+            n_agent = agent_tokens.size(1)
+            k, v = self.kv(agent_tokens).view(b, n_agent, 2, d).permute(2, 0, 1, 3)
+            k = k.reshape(b, n_agent, self.nheads, head_dim).permute(0, 2, 1, 3)
+            v = v.reshape(b, n_agent, self.nheads, head_dim).permute(0, 2, 1, 3)
+
+            q_group = q[:, head_ids, :, :]
+            k_group = k[:, head_ids, :, :]
+            v_group = v[:, head_ids, :, :]
+            q_attn = self.softmax((q_group * self.scale) @ k_group.transpose(-2, -1))
+            q_attn = self.dropout(q_attn)
+            multi_scale_out[:, head_ids, :, :] = q_attn @ v_group
+
+        x = multi_scale_out.transpose(1, 2).reshape(b, n, d)
         
         x = self.proj(x)
         
         return x
 
 class AgentTransformerLayer(nn.Module):
-    def __init__(self, d_model, nheads, pool_size_rate, dim_feedforward=512, dropout=0):
+    def __init__(self, d_model, nheads, pool_size_rate, dim_feedforward=512, dropout=0, head_strides=None):
         super(AgentTransformerLayer, self).__init__()
         self.dim = d_model
         self.nheads = nheads
@@ -101,7 +141,7 @@ class AgentTransformerLayer(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout2 = nn.Dropout(dropout)
         
-        self.attn = AgentAttention(d_model, nheads, pool_size_rate, dropout=dropout)
+        self.attn = AgentAttention(d_model, nheads, pool_size_rate, dropout=dropout, head_strides=head_strides)
         
     def forward(self, x):
         assert x.size(-1) == self.dim
@@ -111,10 +151,10 @@ class AgentTransformerLayer(nn.Module):
         
         
 class AgentTransformerEncoder(nn.Module):
-    def __init__(self, d_model, nheads, num_layers, pool_size_rate, dim_feedforward=512, dropout=0):
+    def __init__(self, d_model, nheads, num_layers, pool_size_rate, dim_feedforward=512, dropout=0, head_strides=None):
         super(AgentTransformerEncoder, self).__init__()
         self.layers = nn.ModuleList([
-            AgentTransformerLayer(d_model, nheads, pool_size_rate, dim_feedforward, dropout)
+            AgentTransformerLayer(d_model, nheads, pool_size_rate, dim_feedforward, dropout, head_strides=head_strides)
             for _ in range(num_layers)
         ])
         self.norm = nn.LayerNorm(d_model)
@@ -137,9 +177,13 @@ class AgentTransformer(nn.Module):
 
         self.in_features = config['feature_pyramid']['dim']
         self.out_features = self.cfg['model_dim']
+        self.maxformer_head_strides = self.cfg.get('maxformer_head_strides', None)
         
         self.pos_encoding = PositionalEncoding(config, self.in_features, self.out_features, seq_len, pos_enc_dropout)
-        self.layers = AgentTransformerEncoder(self.model_dim, nheads, num_encoder_layers, pool_size_rate, self.feedforward_dim, self.cfg['dropout'])
+        self.layers = AgentTransformerEncoder(
+            self.model_dim, nheads, num_encoder_layers, pool_size_rate,
+            self.feedforward_dim, self.cfg['dropout'], head_strides=self.maxformer_head_strides
+        )
 
 
     def forward(self, x):
