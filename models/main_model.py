@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from .eegEncoder import EEGEncoder
 from .hemodynamicEncoder import HemodynamicEncoder
 from .ppgEncoder import PPGEncoder
-from .modalFusion import ModalFusion
+from .modalFusion import ModalFusion, ModalCat
 from .agentTransformer import PositionalEncoding, AgentTransformer
 
 from .classifiers import Classifier
@@ -39,16 +39,17 @@ class Encoder(nn.Module):
                 self.hbDropout = nn.Dropout(p=0.1)
             self.hbo_hb_fc = nn.Linear(self.cfg['feature_pyramid']['dim'] * 2, self.cfg['feature_pyramid']['dim'])
             self.fnirsFusion = ModalFusion(self.cfg)
+            # self.fnirsFusion = ModalCat(self.cfg)
         if self.multimodal[3]:
             self.ppgEncoder = PPGEncoder(self.cfg)
             self.ppgFusion = ModalFusion(self.cfg)
+            # self.ppgFusion = ModalCat(self.cfg)
             if self.bb_cfg['dropout']:
                 self.ppgDropout = nn.Dropout(p=0.1)
                 
         if self.multimodal[1] or self.multimodal[2] or self.multimodal[3]:
             self.Ffc = nn.Linear(self.cfg['feature_pyramid']['dim'] * (sum(self.multimodal[2:4])), last_chn_dict[config['backbone']['name']])
-            self.Efc = nn.Linear(self.cfg['feature_pyramid']['dim'] * (sum(self.multimodal[2:4])+1), last_chn_dict[config['backbone']['name']])
-        # self.sequence_modeling = ModalFusion(self.cfg)
+            self.Efc = nn.Linear(self.cfg['feature_pyramid']['dim'] * (sum(self.multimodal[2:4]) + 1), last_chn_dict[config['backbone']['name']])
 
     def forward(self, eeg=None, hbo=None, hb=None, ppg=None):
 
@@ -101,7 +102,6 @@ class Encoder(nn.Module):
                 eeg_feature = torch.concat(eeg_fusion_feature, dim=2)
                 eeg_feature = self.Efc(eeg_feature)
                 eeg_feature = torch.concat([eeg_feature, fnirs_main_feature], dim=1)
-            # eeg_feature = self.sequence_modeling(eeg_feature, eeg_feature)
             outputs.append(eeg_feature)
         return outputs
 

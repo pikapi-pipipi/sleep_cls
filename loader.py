@@ -235,6 +235,13 @@ class EEGDataLoader(Dataset):
             if self.multimodal[4]:
                 eog.append(npz_file['eog'])
             
+            # npz_labels = npz_file['label']
+            # mapping = {1: 1, 2: 2, 3: 2, 4: 3}
+            # # 向量化映射
+            # vmap = np.vectorize(lambda x: mapping.get(x, x))
+            # npz_labels = vmap(npz_labels)
+            # labels.append(npz_labels)
+            
             labels.append(npz_file['label'])
             if self.multimodal[1] or self.multimodal[2] or self.multimodal[3]:
                 score.append(npz_file['score'])  # (n_modalities, seq_len, 8)

@@ -3,6 +3,19 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+
+class ModalCat(nn.Module):
+    def __init__(self, config):
+        super(ModalCat, self).__init__()
+        self.config = config
+        self.model_dim = config['Transformer']['model_dim']
+        self.feedforward = nn.Linear(self.model_dim, self.model_dim, bias=False)
+    
+    def forward(self, x1, x2):
+        x = torch.concat([x1,x2], dim=1)
+        return self.feedforward(x)
+
+
 class ModalFusion(nn.Module):
     def __init__(self, config):
         super(ModalFusion, self).__init__()
